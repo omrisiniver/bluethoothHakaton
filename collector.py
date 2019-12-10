@@ -107,7 +107,7 @@ def device_inquiry_with_with_rssi(sock):
                 results.append((addr, rssi))
                 print("[{}] RSSI: {}".format(addr, rssi))
 
-                rssi = (ord(pkt[-1]))
+                rssi = (pkt[-1])
                 print (addr,rssi)
         elif event == bluez.EVT_INQUIRY_COMPLETE:
             break
