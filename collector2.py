@@ -95,11 +95,11 @@ def animate():
     print("cal mee!!! ")
     global x_values, y_values, lock
     with lock:
-        print("LOCKING BY ANIMATE")
         print(len(x_values))
         if len(x_values) > BUNCH_NUMBER:
             # y_reduced = noise_reducing(x_values, y_values, window_length=75)
             x_reduced, y_reduced = noise_avarage(x_values, y_values)
+            print(y_reduced)
             msg = pickle.dumps({"location": location, "timestamp": x_reduced, "rssi": y_reduced})
             server_sock.send(msg)
             # plt.plot(x_values, y_reduced, 'b')
