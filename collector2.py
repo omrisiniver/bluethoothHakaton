@@ -1,9 +1,7 @@
+from time import sleep, time
 from mybluetooth import BluetoothRSSI
-from time import sleep
-import mybluetooth
-import sys
-import struct
 import socket
+import pickle
 
 server_ip = '127.0.0.1'
 server_port = 5000
@@ -15,8 +13,10 @@ server_sock.connect((server_ip, server_port))
 
 while True:
 	rssi = b.request_rssi()
+	timestamp = time()
 	print(rssi)
-	# server_sock.send(bytearray(rssi[0]))
-	# print ("---")
-	# print ("addr: {}, rssi: {}".format(mac, rssi))
- #    # Sleep and then skip to next iteration if device not found
+	msg = pickle.dumps({"mac_adr": mac, "timestamp": timestamp, "rssi": rssi})
+	server_sock.send(msg)
+	print ("---")
+	print ("addr: {}, rssi: {}".format(mac, rssi))
+    # Sleep and then skip to next iteration if device not found

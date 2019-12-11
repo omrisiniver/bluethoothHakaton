@@ -32,7 +32,7 @@ class BluetoothRSSI(object):
         # Connecting via PSM 1 - Service Discovery
         self.bt_sock.connect_ex((self.addr, 1))
         self.connected = True
-    
+
     def close(self):
         """Close the bluetooth socket."""
         self.bt_sock.close()
@@ -53,11 +53,17 @@ class BluetoothRSSI(object):
                 self.connect()
             # Command packet prepared each iteration to allow disconnect to trigger IOError
             self.prep_cmd_pkt()
+
+            print('cmd packet is {}'.format(self.cmd_pkt))
             # Send command to request RSSI
             rssi = bt.hci_send_req(
                 self.hci_sock, bt.OGF_STATUS_PARAM,
                 bt.OCF_READ_RSSI, bt.EVT_CMD_COMPLETE, 4, self.cmd_pkt)
-            print(rssi)
+
+            if len(rssi) < 4:
+                print('RSSI IS NONE')
+                return None
+
             rssi = struct.unpack('b', rssi[3].to_bytes(1, 'big'))
             return rssi
         except IOError:

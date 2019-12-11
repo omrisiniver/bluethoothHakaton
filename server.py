@@ -10,10 +10,10 @@ import pickle
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 5000
 
-sock = socket.socket(AF_INET, SOCK_DGRAM)
-sock.bind(SERVER_IP, SERVER_PORT)
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+sock.bind((SERVER_IP, SERVER_PORT))
 
 while True:
-	packet = sock.recv(len(Info))
+	packet = sock.recv(100)
 	info = pickle.loads(packet)
 	print(info)
