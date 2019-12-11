@@ -54,7 +54,7 @@ class BluetoothRSSI(object):
             # Command packet prepared each iteration to allow disconnect to trigger IOError
             self.prep_cmd_pkt()
 
-            print('cmd packet is {}'.format(self.cmd_pkt))
+            # print('cmd packet is {}'.format(self.cmd_pkt))
             # Send command to request RSSI
             rssi = bt.hci_send_req(
                 self.hci_sock, bt.OGF_STATUS_PARAM,
