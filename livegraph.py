@@ -23,6 +23,7 @@ with open('employee_file.csv') as csv_file:
     	x_values.append(row[1])
     	y_values.append(row[0])
 
+print(len(x_values))
 mu, sigma = 0, 500
 plt.plot(x_values, y_values, linewidth=2, linestyle="-", c="b")  # it include some noise
 
