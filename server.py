@@ -32,13 +32,14 @@ class Packet:
         self.timestamp = timestamp
 
 class DataCollector(Thread):
-    def __init__(self, data, is_started, lock):
+    def __init__(self, data, is_started, lock, sock):
         super().__init__()
         self.rlock = lock
         self.data = data
         self.is_started = is_started
         self.far_packet_counter = 0
         self.close_packet_counter = 0
+        self.sock = sock
 
 
     def get_started(self):
@@ -51,8 +52,10 @@ class DataCollector(Thread):
         count_sensors = 0
         while True:
             with self.rlock:
+                print("recv")
                 packet = sock.recv(100)
                 info = pickle.loads(packet)
+                print(info)
                 mac = info["location"]
                 packet = Packet(rssi=info['rssi'], timestamp=info['timestamp'])
                 if mac in self.data:
@@ -63,7 +66,7 @@ class DataCollector(Thread):
                             self.far_packet_counter += 1
                         
                 else:
-                    # print('arrived {} {}'.format(mac, count_sensors))
+                    print('arrived {} {}'.format(mac, count_sensors))
                     count_sensors += 1
                     if count_sensors == 2:
                         self.is_started = True
@@ -129,7 +132,8 @@ class Server(Thread):
 
 if __name__ == "__main__":
     # global data
-    data_collector = DataCollector(data=data, is_started=is_started, lock=lock)
+    print("START MAIN..")
+    data_collector = DataCollector(data=data, is_started=is_started, lock=lock, sock=sock)
     data_collector.start()
     
     server = Server()

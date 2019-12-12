@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from threading import Thread, RLock
 
-server_ip = '192.168.4.39'
+server_ip = '192.168.4.51'
 server_port = 5000
 # mac = '88:75:98:A6:33:C7'
 mac = '9C:E3:3F:D3:9D:CA'
@@ -93,7 +93,7 @@ def noise_avarage(x, y):
 
 def animate():
     print("cal mee!!! ")
-    global x_values, y_values, lock
+    global x_values, y_values, lock, server_sock
     with lock:
         print(len(x_values))
         if len(x_values) > BUNCH_NUMBER:
