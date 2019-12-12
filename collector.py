@@ -1,196 +1,120 @@
-# simple inquiry example
-import bluetooth
-import sys
-import struct
-import bluetooth._bluetooth as bluez  # low level bluetooth wrappers
-from socket import (
-    socket,
-    AF_BLUETOOTH,
-    SOCK_RAW,
-    BTPROTO_HCI,
-    SOL_HCI,
-    HCI_FILTER,
-)
+from time import sleep, time
+from mybluetooth import BluetoothRSSI
+import socket
+import pickle
+import time
+import random
+from itertools import count
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from threading import Thread, RLock
 
-def printpacket(pkt):
-    for c in pkt:
-        sys.stdout.write("{%02x} ".format(struct.unpack("B", c)[0]))
+server_ip = '192.168.4.39'
+server_port = 5000
+# mac = '88:75:98:A6:33:C7'
+mac = '9C:E3:3F:D3:9D:CA'
+location = 'in_door'
+BUNCH_NUMBER = 150
 
-def read_inquiry_mode(sock):
-    """returns the current mode, or -1 on failure"""
-    # save current filter
-    old_filter = sock.getsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, 14)
+b = BluetoothRSSI(addr=mac)
 
-    # Setup socket filter to receive only events related to the
-    # read_inquiry_mode command
-    flt = bluez.hci_filter_new()
-    opcode = bluez.cmd_opcode_pack(bluez.OGF_HOST_CTL,
-                                   bluez.OCF_READ_INQUIRY_MODE)
-    bluez.hci_filter_set_ptype(flt, bluez.HCI_EVENT_PKT)
-    bluez.hci_filter_set_event(flt, bluez.EVT_CMD_COMPLETE)
-    bluez.hci_filter_set_opcode(flt, opcode)
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, flt)
+server_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_sock.connect((server_ip, server_port))
 
-    # first read the current inquiry mode.
-    bluez.hci_send_cmd(sock, bluez.OGF_HOST_CTL,
-                       bluez.OCF_READ_INQUIRY_MODE)
+from scipy.signal import savgol_filter
 
-    pkt = sock.recv(255)
-    status, mode = struct.unpack("xxxxxxBB", pkt)
 
-    # restore old filter
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, old_filter)
+def noise_reducing(x, y, window_length=101, polyorder=2):
+    w = savgol_filter(y, window_length, polyorder)
+    return w
 
-    return mode
 
-def write_inquiry_mode(sock, mode):
-    """returns 0 on success, -1 on failure"""
-    # save current filter
-    old_filter = sock.getsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, 14)
+class Data:
+    def __init__(self, rssi, timestamp):
+        self.rssi = rssi
+        self.timestamp = timestamp
 
-    # Setup socket filter to receive only events related to the
-    # write_inquiry_mode command
-    flt = bluez.hci_filter_new()
-    opcode = bluez.cmd_opcode_pack(bluez.OGF_HOST_CTL,
-                                   bluez.OCF_WRITE_INQUIRY_MODE)
-    bluez.hci_filter_set_ptype(flt, bluez.HCI_EVENT_PKT)
-    bluez.hci_filter_set_event(flt, bluez.EVT_CMD_COMPLETE)
-    bluez.hci_filter_set_opcode(flt, opcode)
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, flt)
 
-    # send the command!
-    bluez.hci_send_cmd(sock, bluez.OGF_HOST_CTL,
-                       bluez.OCF_WRITE_INQUIRY_MODE,
-                       struct.pack("B", mode))
+def info_gathering():
+    rssi = b.request_rssi()
+    if rssi is None:
+        return None
 
-    pkt = sock.recv(255)
-    status = struct.unpack("xxxxxxB", pkt)[0]
+    timestamp = time.time()
 
-    # restore old filter
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, old_filter)
-    if not status:
-        return -1
+    # print(rssi)
+    # print("---")
+    # print("addr: {}, rssi: {}".format(mac, rssi[0]))
+    # print("rssi: {}".format(rssi[0]))
+    return Data(rssi=rssi[0], timestamp=timestamp)
 
-    return 0
 
-def device_inquiry_with_with_rssi(sock):
-    # save current filter
-    old_filter = sock.getsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, 14)
+def batch_gathering(batch_size=5):
+    info = []
+    for _ in range(batch_size):
+        one_sample = info_gathering()
 
-    # perform a device inquiry on bluetooth device #0
-    # The inquiry should last 8 * 1.28 = 10.24 seconds
-    # before the inquiry is performed, bluez should flush its cache of
-    # previously discovered devices
-    flt = bluez.hci_filter_new()
-    bluez.hci_filter_all_events(flt)
-    bluez.hci_filter_set_ptype(flt, bluez.HCI_EVENT_PKT)
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, flt)
+        if one_sample is None:
+            # TODO:: need to understand how to act when it appears
+            return None
 
-    duration = 4
-    max_responses = 255
-    cmd_pkt = struct.pack("BBBBB", 0x33, 0x8b, 0x9e, duration, max_responses)
-    bluez.hci_send_cmd(sock, bluez.OGF_LINK_CTL, bluez.OCF_INQUIRY, cmd_pkt)
+        info.append(one_sample)
+    return info
 
-    results = []
 
+plt.style.use('fivethirtyeight')
+
+index = count()
+x_values = []
+y_values = []
+lock = RLock()
+
+
+class DataCollector(Thread):
+    def __init__(self, x, y, lock):
+        super().__init__()
+        self.rlock = lock
+        self.x = x
+        self.y = y
+
+    def run(self):
+        while True:
+            with self.rlock:
+                # print("LOCKING BY DATA")
+                data = info_gathering()
+                self.x.append(data.timestamp)
+                self.y.append(data.rssi)
+                # print("data.timestamp: {}, rssi: {}".format(data.timestamp, data.rssi))
+                # print("DATA RELEASED THE LOCK")
+
+def noise_avarage(x, y):
+    return sum(x) / len(x), sum(y) / len(y)
+
+
+def animate():
+    print("cal mee!!! ")
+    global x_values, y_values, lock
+    with lock:
+        print(len(x_values))
+        if len(x_values) > BUNCH_NUMBER:
+            # y_reduced = noise_reducing(x_values, y_values, window_length=75)
+            x_reduced, y_reduced = noise_avarage(x_values[:BUNCH_NUMBER], y_values[:BUNCH_NUMBER])
+            print(y_reduced)
+            msg = pickle.dumps({"location": location, "timestamp": x_reduced, "rssi": y_reduced})
+            server_sock.send(msg)
+            # plt.plot(x_values, y_reduced, 'b')
+            x_values[:] = x_values[BUNCH_NUMBER:]
+            y_values[:] = y_values[BUNCH_NUMBER:]
+        # print("ANIMATE RELASED THE LOCK")
+
+
+if __name__ == "__main__":
+    data_collector = DataCollector(x=x_values, y=y_values, lock=lock)
+    data_collector.start()
     while True:
-        pkt = sock.recv(255)
-        ptype, event, plen = struct.unpack("BBB", pkt[:3])
-        print("Event: {}".format(event))
-        if event == bluez.EVT_INQUIRY_RESULT_WITH_RSSI:
-            pkt = pkt[3:]
-            nrsp = bluetooth.get_byte(pkt[0])
-            for i in range(nrsp):
-                addr = bluez.ba2str(pkt[1+6*i:1+6*i+6])
-                rssi = bluetooth.byte_to_signed_int(
-                    bluetooth.get_byte(pkt[1 + 13 * nrsp + i]))
-                results.append((addr, rssi))
-                print("[{}] RSSI: {}".format(addr, rssi))
+        animate()
+    # ani = FuncAnimation(plt.gcf(), animate, 1)
+    # plt.tight_layout()
+    # plt.show()
 
-                rssi = (pkt[-1])
-                print (addr,rssi)
-        elif event == bluez.EVT_INQUIRY_COMPLETE:
-            break
-        elif event == bluez.EVT_CMD_STATUS:
-            status, ncmd, opcode = struct.unpack("BBH", pkt[3:7])
-            if status:
-                print("Uh oh...")
-                printpacket(pkt[3:7])
-                break
-        elif event == bluez.EVT_INQUIRY_RESULT:
-            pkt = pkt[3:]
-            nrsp = bluetooth.get_byte(pkt[0])
-            for i in range(nrsp):
-                addr = bluez.ba2str(pkt[1+6*i:1+6*i+6])
-                results.append((addr, -1))
-                print("[{}] (no RRSI)".format(addr))
-                rssi = (pkt[-1])
-                print (addr,rssi)
-        else:
-            print("Unrecognized packet type 0x{:02x}.".format(ptype))
-
-    # restore old filter
-    sock.setsockopt(bluez.SOL_HCI, bluez.HCI_FILTER, old_filter)
-
-    return results
-
-
-
-print("before discover_devices")
-nearby_devices = bluetooth.discover_devices(lookup_names=True)
-print("Found {} devices.".format(len(nearby_devices)))
-
-for addr, name in nearby_devices:
-    print("  {} - {}".format(addr, name))
-
-# dev_id = bluez.hci_get_route('80:2B:F9:E8:45:26')
-# print(dev_id)
-
-# sock = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)
-# sock.bind((dev_id,))
-
-# hci_filter = struct.pack(
-#     "<IQH",
-#     0x00000010,
-#     0x4000000000000000,
-#     0
-# )
-# sock.setsockopt(SOL_HCI, HCI_FILTER, hci_filter)
-
-# while True:
-# 	print('before receive')
-# 	data = sock.recv(1024)
-# 	# print bluetooth address from LE Advert. packet
-# 	addr = ':'.join("{0:02x}".format(ord(x)) for x in data[12:6:-1])
-# 	rssi = (ord(data[-1]))
-# 	print (addr,rssi)
-
-dev_id = bluez.hci_get_route('80:2B:F9:E8:45:26')
-try:
-    sock = bluez.hci_open_dev(dev_id)
-except:
-    print("Error accessing bluetooth device.")
-    sys.exit(1)
-
-try:
-    mode = read_inquiry_mode(sock)
-except Exception as e:
-    print("Error reading inquiry mode.")
-    print("Are you sure this a bluetooth 1.2 device?")
-    print(e)
-    sys.exit(1)
-print("Current inquiry mode is", mode)
-
-if mode != 1:
-    print("Writing inquiry mode...")
-    try:
-        result = write_inquiry_mode(sock, 1)
-    except Exception as e:
-        print("Error writing inquiry mode. Are you sure you're root?")
-        print(e)
-        sys.exit(1)
-    if result:
-        print("Error while setting inquiry mode")
-    print("Result:", result)
-
-device_inquiry_with_with_rssi(sock)
+    # data_collector.join()

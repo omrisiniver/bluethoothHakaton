@@ -12,7 +12,7 @@ import requests
 import collections
 url = 'https://theroom-1df52.firebaseio.com/alarm.json'
 
-SERVER_IP = '192.168.4.39'
+SERVER_IP = '192.168.4.51'
 SERVER_PORT = 5000
 THRESHOLD = 10
 
@@ -71,7 +71,10 @@ class DataCollector(Thread):
                 self.data[mac][packet.timestamp] = packet.rssi
 
 def calc_grad(data):
-    batches = data / 10
+    first = data[0][0] 
+    last = data[0][-1]
+    grad = (data[1][-1] - data[1][0]) / (data[0][-1] - data[1][0])
+    return grad
 
 class Server(Thread):
 
@@ -89,14 +92,14 @@ class Server(Thread):
                 continue
             prev_check = enemy
 
-            in_door = data[IN_DOOR]
-            out_door = data[OUT_DOOR]
+            in_door = data[IN_DOOR][:-1]
+            out_door = data[OUT_DOOR][:-1]
 
             delta = in_door - out_door
 
             # Graph change over time
-            in_gradient = calc_grad(in_door)
-            out_gradient = calc_grad(out_door)
+            # in_gradient = calc_grad([data[IN_DOOR]])
+            # out_gradient = calc_grad(data[OUT_DOOR])
 
             if in_door > out_door:
                 enemy = False
