@@ -10,9 +10,10 @@ from threading import Thread, RLock
 import json
 import requests
 import collections
+
 url = 'https://theroom-1df52.firebaseio.com/alarm.json'
 
-SERVER_IP = '192.168.4.51'
+SERVER_IP = '192.168.4.39'
 SERVER_PORT = 5000
 THRESHOLD = 10
 
@@ -20,16 +21,17 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
 sock.bind((SERVER_IP, SERVER_PORT))
 
 data = {}
-enemy = False
 lock = RLock()
 IN_DOOR = 'in door'
 OUT_DOOR = 'out door'
 is_started = False
 
+
 class Packet:
     def __init__(self, rssi, timestamp):
         self.rssi = rssi
         self.timestamp = timestamp
+
 
 class DataCollector(Thread):
     def __init__(self, data, is_started, lock, sock):
@@ -41,7 +43,6 @@ class DataCollector(Thread):
         self.close_packet_counter = 0
         self.sock = sock
 
-
     def get_started(self):
         return self.is_started
 
@@ -52,10 +53,10 @@ class DataCollector(Thread):
         count_sensors = 0
         while True:
             with self.rlock:
-                print("recv")
+                # print("recv")
                 packet = sock.recv(100)
                 info = pickle.loads(packet)
-                print(info)
+                # print(info)
                 mac = info["location"]
                 packet = Packet(rssi=info['rssi'], timestamp=info['timestamp'])
                 if mac in self.data:
@@ -64,39 +65,41 @@ class DataCollector(Thread):
                             self.close_packet_counter += 1
                         else:
                             self.far_packet_counter += 1
-                        
+
                 else:
                     print('arrived {} {}'.format(mac, count_sensors))
                     count_sensors += 1
                     if count_sensors == 2:
                         self.is_started = True
                     self.data[mac] = collections.OrderedDict()
+                    # self.data[mac] = {}
                 self.data[mac][packet.timestamp] = packet.rssi
 
+
 def calc_grad(data):
-    first = data[0][0] 
+    first = data[0][0]
     last = data[0][-1]
     grad = (data[1][-1] - data[1][0]) / (data[0][-1] - data[1][0])
     return grad
+
 
 class Server(Thread):
 
     def run(self):
         global data
-
+        enemy = False
         counter = 0
         while True:
             if data_collector.get_started() is False:
                 continue
 
-            curr_far, curr_close = data_collector.get_packet_counter()
-            if curr_close < counter or curr_far < counter:
-                # print('stuck {} {}'.format(curr_close, curr_far))
-                continue
+            # curr_far, curr_close = data_collector.get_packet_counter()
+            # if curr_close < counter or curr_far < counter:
+            #     # print('stuck {} {}'.format(curr_close, curr_far))
+            #     continue
             prev_check = enemy
-
-            in_door = data[IN_DOOR][:-1]
-            out_door = data[OUT_DOOR][:-1]
+            in_door = abs(data[IN_DOOR][list(data[IN_DOOR].keys())[-1]])
+            out_door = abs(data[OUT_DOOR][list(data[OUT_DOOR].keys())[-1]])
 
             delta = in_door - out_door
 
@@ -135,6 +138,6 @@ if __name__ == "__main__":
     print("START MAIN..")
     data_collector = DataCollector(data=data, is_started=is_started, lock=lock, sock=sock)
     data_collector.start()
-    
+
     server = Server()
     server.start()
