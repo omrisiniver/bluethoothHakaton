@@ -11,7 +11,7 @@ import json
 import requests
 url = 'https://theroom-1df52.firebaseio.com/alarm.json'
 
-SERVER_IP = '192.168.1.27'
+SERVER_IP = '192.168.4.39'
 SERVER_PORT = 5000
 THRESHOLD = 10
 
@@ -49,11 +49,12 @@ class DataCollector(Thread):
                 info = pickle.loads(packet)
                 mac = info["location"]
                 if mac in self.data:
-                    if mac == 'close_from_door':
-                        self.close_packet_counter += 1
-                    else:
-                        self.far_packet_counter += 1
-                    self.data[mac].append(info['rssi'])
+                    if self.is_started:
+                        if mac == 'close_from_door':
+                            self.close_packet_counter += 1
+                        else:
+                            self.far_packet_counter += 1
+                        self.data[mac].append(info['rssi'])
                 else:
                     print('arrived {} {}'.format(mac, count_sensors))
                     count_sensors += 1

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from threading import Thread, RLock
 
-server_ip = '192.168.1.27'
+server_ip = '192.168.4.39'
 server_port = 5000
 # mac = '88:75:98:A6:33:C7'
 mac = '9C:E3:3F:D3:9D:CA'
